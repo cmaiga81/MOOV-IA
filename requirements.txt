@@ -1,5 +1,5 @@
 flask
 flask-cors
 requests
-openai==1.54.4
+openai>=1.59.0
 gunicorn
