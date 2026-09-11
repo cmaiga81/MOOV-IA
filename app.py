@@ -11,11 +11,10 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 
 app = Flask(__name__)
-CORS(app)  # Autorise les appels depuis le frontend HTML (à restreindre en prod, cf. note plus bas)
+CORS(app)
 
-# La clé est lue depuis une variable d'environnement — jamais codée en dur, jamais exposée au client
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
-GEMINI_MODEL = "gemini-2.0-flash"
+GEMINI_MODEL = "gemini-2.5-flash"
 GEMINI_URL = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent"
 
 SYSTEM_PROMPTS = {
@@ -55,7 +54,10 @@ def ask():
     payload = {
         "systemInstruction": {"parts": [{"text": SYSTEM_PROMPTS[lang]}]},
         "contents": [{"role": "user", "parts": [{"text": question}]}],
-        "generationConfig": {"maxOutputTokens": 200},
+        "generationConfig": {
+            "maxOutputTokens": 200,
+            "thinkingConfig": {"thinkingBudget": 0},
+        },
     }
 
     try:
@@ -80,11 +82,10 @@ def ask():
         return jsonify({"answer": text})
 
     except requests.exceptions.RequestException as e:
-    error_body = e.response.text if e.response is not None else "pas de réponse"
-    app.logger.error(f"Erreur appel Gemini: {e} | Corps: {error_body}")
-    msg = "Erreur du service IA. Réessaie plus tard." if lang == "fr" else "AI service error. Try again later."
-    return jsonify({"error": msg}), 502
-
+        error_body = e.response.text if e.response is not None else "pas de réponse"
+        app.logger.error(f"Erreur appel Gemini: {e} | Corps: {error_body}")
+        msg = "Erreur du service IA. Réessaie plus tard." if lang == "fr" else "AI service error. Try again later."
+        return jsonify({"error": msg}), 502
 
 
 if __name__ == "__main__":
