@@ -15,7 +15,7 @@ CORS(app)  # Autorise les appels depuis le frontend HTML (à restreindre en prod
 
 # La clé est lue depuis une variable d'environnement — jamais codée en dur, jamais exposée au client
 GEMINI_API_KEY = (os.environ.get("GEMINI_API_KEY") or "").strip()
-GEMINI_MODEL = "gemini-2.0-flash"
+GEMINI_MODEL = "gemini-2.5-flash"
 GEMINI_URL = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent"
 
 SYSTEM_PROMPTS = {
