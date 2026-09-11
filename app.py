@@ -80,9 +80,11 @@ def ask():
         return jsonify({"answer": text})
 
     except requests.exceptions.RequestException as e:
-        app.logger.error(f"Erreur appel Gemini: {e}")
-        msg = "Erreur du service IA. Réessaie plus tard." if lang == "fr" else "AI service error. Try again later."
-        return jsonify({"error": msg}), 502
+    error_body = e.response.text if e.response is not None else "pas de réponse"
+    app.logger.error(f"Erreur appel Gemini: {e} | Corps: {error_body}")
+    msg = "Erreur du service IA. Réessaie plus tard." if lang == "fr" else "AI service error. Try again later."
+    return jsonify({"error": msg}), 502
+
 
 
 if __name__ == "__main__":
