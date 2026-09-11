@@ -1,21 +1,24 @@
 """
 MOOV IA — Serveur relais Flask
-Reçoit les questions du frontend HTML, appelle l'API Gemini côté serveur
-(hors des restrictions géographiques et sans exposer la clé API au client),
-et renvoie la réponse SMS-friendly (~160 caractères).
+Reçoit les questions du frontend HTML, appelle l'API Groq côté serveur
+(sans exposer la clé API au client), et renvoie la réponse SMS-friendly (~160 caractères).
 """
 
 import os
-import requests
 from flask import Flask, request, jsonify
 from flask_cors import CORS
+from openai import OpenAI
 
 app = Flask(__name__)
 CORS(app)
 
-GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
-GEMINI_MODEL = "gemini-2.5-pro"
-GEMINI_URL = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent"
+GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
+GROQ_MODEL = "llama-3.3-70b-versatile"
+
+client = OpenAI(
+    api_key=GROQ_API_KEY,
+    base_url="https://api.groq.com/openai/v1",
+)
 
 SYSTEM_PROMPTS = {
     "fr": (
@@ -39,8 +42,8 @@ def health():
 
 @app.route("/ask", methods=["POST"])
 def ask():
-    if not GEMINI_API_KEY:
-        return jsonify({"error": "Clé API Gemini non configurée côté serveur."}), 500
+    if not GROQ_API_KEY:
+        return jsonify({"error": "Clé API Groq non configurée côté serveur."}), 500
 
     data = request.get_json(silent=True) or {}
     question = (data.get("question") or "").strip()
@@ -51,29 +54,17 @@ def ask():
     if not question:
         return jsonify({"error": "Question vide."}), 400
 
-    payload = {
-        "systemInstruction": {"parts": [{"text": SYSTEM_PROMPTS[lang]}]},
-        "contents": [{"role": "user", "parts": [{"text": question}]}],
-        "generationConfig": {
-            "maxOutputTokens": 200,
-            "thinkingConfig": {"thinkingBudget": 0},
-        },
-    }
-
     try:
-        resp = requests.post(
-            GEMINI_URL,
-            params={"key": GEMINI_API_KEY},
-            json=payload,
+        response = client.chat.completions.create(
+            model=GROQ_MODEL,
+            messages=[
+                {"role": "system", "content": SYSTEM_PROMPTS[lang]},
+                {"role": "user", "content": question},
+            ],
+            max_tokens=200,
             timeout=20,
         )
-        resp.raise_for_status()
-        result = resp.json()
-        candidates = result.get("candidates", [])
-        text = ""
-        if candidates:
-            parts = candidates[0].get("content", {}).get("parts", [])
-            text = "".join(p.get("text", "") for p in parts).strip()
+        text = (response.choices[0].message.content or "").strip()
 
         if not text:
             fallback = "Erreur, reessaie." if lang == "fr" else "Error, try again."
@@ -81,9 +72,8 @@ def ask():
 
         return jsonify({"answer": text})
 
-    except requests.exceptions.RequestException as e:
-        error_body = e.response.text if e.response is not None else "pas de réponse"
-        app.logger.error(f"Erreur appel Gemini: {e} | Corps: {error_body}")
+    except Exception as e:
+        app.logger.error(f"Erreur appel Groq: {e}")
         msg = "Erreur du service IA. Réessaie plus tard." if lang == "fr" else "AI service error. Try again later."
         return jsonify({"error": msg}), 502
 
