@@ -1,4 +1,4 @@
 flask
 flask-cors
 requests
-openai
+openai==1.54.4
