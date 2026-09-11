@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>MOOV IA — Prototype (via relais Flask)</title>
+<style>
+  body { font-family: -apple-system, sans-serif; background: #ece5dd; margin: 0; padding: 20px; display: flex; justify-content: center; }
+  .phone { width: 360px; background: #fff; border-radius: 20px; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.15); }
+  .header { background: #075E54; color: white; padding: 14px 16px; display: flex; align-items: center; gap: 10px; }
+  .avatar { width: 36px; height: 36px; border-radius: 50%; background: #128C7E; display: flex; align-items: center; justify-content: center; font-weight: 600; font-size: 13px; }
+  .header-info { flex: 1; }
+  .header-info .name { font-weight: 600; font-size: 15px; }
+  .header-info .status { font-size: 11px; opacity: 0.85; }
+  select#lang { background: #128C7E; color: white; border: none; border-radius: 6px; padding: 4px 6px; font-size: 12px; }
+  .thread { height: 380px; overflow-y: auto; background: #e5ddd5; padding: 12px; display: flex; flex-direction: column; gap: 8px; }
+  .bubble { max-width: 75%; padding: 8px 12px; border-radius: 12px; font-size: 13px; line-height: 1.5; white-space: pre-wrap; }
+  .bubble.user { align-self: flex-end; background: #dcf8c6; }
+  .bubble.ai { align-self: flex-start; background: #fff; }
+  .bubble.typing { align-self: flex-start; background: #fff; color: #888; font-style: italic; }
+  .bubble.error { align-self: center; background: #ffe0e0; color: #900; font-size: 12px; }
+  .charcount { font-size: 10px; color: #888; margin-top: 2px; }
+  .inputbar { display: flex; gap: 8px; padding: 10px; background: #f0f0f0; }
+  .inputbar input { flex: 1; border: 1px solid #ccc; border-radius: 18px; padding: 8px 14px; font-size: 13px; }
+  .inputbar button { background: #128C7E; color: white; border: none; border-radius: 50%; width: 36px; height: 36px; cursor: pointer; }
+  .note { font-size: 11px; color: #666; text-align: center; padding: 6px 10px 12px; }
+</style>
+</head>
+<body>
+
+<div class="phone">
+  <div class="header">
+    <div class="avatar">MI</div>
+    <div class="header-info">
+      <div class="name">MOOV IA</div>
+      <div class="status">SMS · Abonné (via serveur relais)</div>
+    </div>
+    <select id="lang">
+      <option value="fr">FR</option>
+      <option value="en">EN</option>
+    </select>
+  </div>
+  <div class="thread" id="thread"></div>
+  <div class="inputbar">
+    <input id="msg" type="text" maxlength="200" placeholder="Écris ta question..." />
+    <button id="send">➤</button>
+  </div>
+  <div class="note">Réponses générées par Gemini (via serveur relais), limitées à ~160 caractères comme un vrai SMS.</div>
+</div>
+
+<script>
+// URL du serveur relais Flask — à remplacer par ton URL Render une fois déployé
+// Exemple : "https://moov-ia-relay.onrender.com/ask"
+const RELAY_URL = "http://localhost:5000/ask";
+
+const thread = document.getElementById('thread');
+const input = document.getElementById('msg');
+const sendBtn = document.getElementById('send');
+const langSel = document.getElementById('lang');
+
+const greetings = {
+  fr: "Bonjour ! Pose-moi ta question (études, business, culture...) je réponds par SMS.",
+  en: "Hi! Ask me anything (school, business, culture...) I reply by SMS."
+};
+
+function addBubble(text, cls) {
+  const b = document.createElement('div');
+  b.className = 'bubble ' + cls;
+  b.textContent = text;
+  thread.appendChild(b);
+  thread.scrollTop = thread.scrollHeight;
+  return b;
+}
+
+addBubble(greetings.fr, 'ai');
+
+async function askRelay(question, lang) {
+  const response = await fetch(RELAY_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ question, lang })
+  });
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(data.error || (lang === 'fr' ? "Erreur du serveur relais." : "Relay server error."));
+  }
+
+  return data.answer;
+}
+
+async function handleSend() {
+  const val = input.value.trim();
+  if (!val) return;
+  addBubble(val, 'user');
+  input.value = '';
+  sendBtn.disabled = true;
+
+  const lang = langSel.value;
+  const typingBubble = addBubble(lang === 'fr' ? "MOOV IA écrit..." : "MOOV IA is typing...", 'typing');
+
+  try {
+    const answer = await askRelay(val, lang);
+    typingBubble.remove();
+    addBubble(answer, 'ai');
+  } catch (err) {
+    typingBubble.remove();
+    addBubble(err.message || (lang === 'fr' ? "Erreur reseau, reessaie." : "Network error, try again."), 'error');
+  } finally {
+    sendBtn.disabled = false;
+  }
+}
+
+sendBtn.addEventListener('click', handleSend);
+input.addEventListener('keydown', (e) => { if (e.key === 'Enter') handleSend(); });
+langSel.addEventListener('change', () => {
+  addBubble(greetings[langSel.value], 'ai');
+});
+</script>
+
+</body>
+</html>
